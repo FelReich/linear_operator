@@ -24,6 +24,7 @@ def linear_cg(
     max_tridiag_iter=None,
     initial_guess=None,
     preconditioner=None,
+    save_directions=False,
 ):
     """
     Implements the linear conjugate gradients method for (approximately) solving systems of the form
@@ -43,10 +44,12 @@ def linear_cg(
       - max_tridiag_iter - the maximum size of the tridiagonalization matrix
       - initial_guess - an initial guess at the solution `result`
       - precondition_closure - a functions which left-preconditions a supplied vector
+      - save_directions - store CG search directions and matrix-vector products for CG-Lanczos variance estimates
 
     Returns:
       result - a solution to the system (if n_tridiag is 0)
       result, tridiags - a solution to the system, and corresponding tridiagonal matrices (if n_tridiag > 0)
+      result, d_mat, kd_mat - a solution, stored directions, and matrix-vector products (if save_directions)
     """
     # Unsqueeze, if necesasry
     is_vector = rhs.ndimension() == 1
@@ -67,6 +70,7 @@ def linear_cg(
             initial_guess = initial_guess.unsqueeze(-1)
     if tolerance is None:
         tolerance = settings.cg_tolerance.value()
+    precond = preconditioner is not None
     if preconditioner is None:
         preconditioner = _default_preconditioner
 
@@ -79,6 +83,13 @@ def linear_cg(
         matmul_closure = matmul_closure.matmul
     elif not callable(matmul_closure):
         raise RuntimeError("matmul_closure must be a tensor, or a callable object!")
+
+    if save_directions and n_tridiag:
+        raise NotImplementedError("save_directions cannot currently be combined with n_tridiag.")
+    if save_directions and precond:
+        raise NotImplementedError("save_directions currently supports only the unpreconditioned case.")
+    if save_directions and rhs.size(-1) != 1:
+        raise NotImplementedError("save_directions currently supports only a single right-hand side.")
 
     # Get some constants
     num_rows = rhs.size(-2)
@@ -156,18 +167,71 @@ def linear_cg(
     # It's conceivable we reach the tolerance on the last iteration, so can't just check iteration number.
     tolerance_reached = False
 
+    num_stored = 0
+    if save_directions:
+        d_mat = rhs.new_zeros(n_iter, *batch_shape, num_rows)
+        kd_mat = rhs.new_zeros(n_iter, *batch_shape, num_rows)
+        save_directions_cg = True
+    else:
+        save_directions_cg = False
+
     # Start the iteration
     for k in range(n_iter):
         # Get next alpha
         # alpha_{k} = (residual_{k-1}^T precon_residual{k-1}) / (p_vec_{k-1}^T mat p_vec_{k-1})
         mvms = matmul_closure(curr_conjugate_vec)
+
+        direction_was_reorthogonalized = False
+        if save_directions_cg:
+            if k > 0:
+                d_prev = d_mat[:k]
+                kd_prev = kd_mat[:k]
+                direction_was_reorthogonalized = True
+
+                could_reorthogonalize = False
+                for _ in range(10):
+                    dkd = torch.mul(d_prev, kd_prev).sum(dim=-1)
+                    dkd_is_zero = torch.lt(dkd.abs(), eps)
+                    dkd.masked_fill_(dkd_is_zero, 1.0)
+
+                    coeffs = torch.mul(kd_prev, curr_conjugate_vec.squeeze(-1)).sum(dim=-1).div(dkd)
+                    coeffs.masked_fill_(dkd_is_zero, 0.0)
+
+                    curr_conjugate_vec.sub_((d_prev * coeffs.unsqueeze(-1)).sum(dim=0).unsqueeze(-1))
+                    mvms.sub_((kd_prev * coeffs.unsqueeze(-1)).sum(dim=0).unsqueeze(-1))
+
+                    inner_products = torch.mul(kd_prev, curr_conjugate_vec.squeeze(-1)).sum(dim=-1)
+                    new_dkd = torch.mul(curr_conjugate_vec.squeeze(-1), mvms.squeeze(-1)).sum(dim=-1)
+                    if new_dkd.dim() == 0:
+                        scale = torch.sqrt(dkd.abs().mul(new_dkd.abs()))
+                    else:
+                        scale = torch.sqrt(torch.matmul(dkd.abs(), new_dkd.abs()))
+                    rel_inner_products = inner_products.abs().div(scale.clamp_min(eps))
+
+                    if not torch.sum(rel_inner_products.abs() > tolerance):
+                        could_reorthogonalize = True
+                        break
+
+                if not could_reorthogonalize:
+                    save_directions_cg = False
+                    num_stored = k
+
+            if save_directions_cg:
+                d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
+                kd_mat[k].copy_(mvms.squeeze(-1))
+                num_stored = k + 1
+
         torch.mul(curr_conjugate_vec, mvms, out=mul_storage)
         torch.sum(mul_storage, -2, keepdim=True, out=alpha)
 
         # Do a safe division here
         torch.lt(alpha, eps, out=is_zero)
         alpha.masked_fill_(is_zero, 1)
-        torch.div(residual_inner_prod, alpha, out=alpha)
+        if direction_was_reorthogonalized:
+            alpha_numerator = torch.mul(residual, curr_conjugate_vec).sum(dim=-2, keepdim=True)
+        else:
+            alpha_numerator = residual_inner_prod
+        torch.div(alpha_numerator, alpha, out=alpha)
         alpha.masked_fill_(is_zero, 0)
 
         # We'll cancel out any updates by setting alpha=0 for any vector that has already converged
@@ -254,6 +318,11 @@ def linear_cg(
     if is_vector:
         result = result.squeeze(-1)
 
+    if save_directions:
+        d_mat = d_mat[:num_stored].permute(*range(1, 1 + len(batch_shape)), -1, 0).contiguous()
+        kd_mat = kd_mat[:num_stored].permute(*range(1, 1 + len(batch_shape)), -1, 0).contiguous()
+        return result, d_mat, kd_mat
+
     if n_tridiag:
         t_mat = t_mat[: last_tridiag_iter + 1, : last_tridiag_iter + 1]
         return (
@@ -262,3 +331,56 @@ def linear_cg(
         )
     else:
         return result
+
+
+
+def cg_store_lanczos_basis(
+    matmul_closure,
+    rhs,
+    n_tridiag=0,
+    tolerance=None,
+    eps=1e-10,
+    stop_updating_after=1e-10,
+    max_iter=None,
+    max_tridiag_iter=None,
+    initial_guess=None,
+    preconditioner=None,
+):
+    """Run CG and recover a Lanczos-type basis from stored search directions."""
+    if preconditioner is not None:
+        raise NotImplementedError("cg_store_lanczos_basis currently supports only the unpreconditioned case.")
+
+    result, d_mat, kd_mat = linear_cg(
+        matmul_closure,
+        rhs,
+        n_tridiag=n_tridiag,
+        tolerance=tolerance,
+        eps=eps,
+        stop_updating_after=stop_updating_after,
+        max_iter=max_iter,
+        max_tridiag_iter=max_tridiag_iter,
+        initial_guess=initial_guess,
+        preconditioner=None,
+        save_directions=True,
+    )
+
+    q_mat, r_mat = torch.linalg.qr(d_mat, mode="reduced")
+
+    rank_tol = 1e-10 if d_mat.dtype == torch.float64 else 1e-5
+    diag_r = torch.diagonal(r_mat, dim1=-2, dim2=-1).abs()
+    rel_diag_r = diag_r / diag_r[..., :1].clamp_min(eps)
+    valid = (rel_diag_r > rank_tol).to(torch.int64).cumprod(dim=-1).bool()
+    num_keep = int(valid.to(torch.int64).sum(dim=-1).min().item()) if valid.dim() > 1 else int(valid.sum().item())
+
+    if num_keep == 0:
+        raise RuntimeError("All stored CG directions were discarded by the QR rank cutoff.")
+
+    q_mat = q_mat[..., :, :num_keep]
+    r_mat = r_mat[..., :num_keep, :num_keep]
+    kd_mat = kd_mat[..., :, :num_keep]
+
+    kq_mat_t = torch.linalg.solve(r_mat.transpose(-1, -2), kd_mat.transpose(-1, -2))
+    t_mat = kq_mat_t.matmul(q_mat)
+    t_mat = 0.5 * (t_mat + t_mat.transpose(-1, -2))
+
+    return result, q_mat, t_mat
