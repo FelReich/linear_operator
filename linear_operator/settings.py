@@ -544,6 +544,20 @@ class use_cg_lanczos_variance(_feature_flag):
     _default = False
 
 
+class cg_lanczos_aggressive_mean_stop(_feature_flag):
+    """Stop CG when CG-Lanczos direction storage can no longer be stabilized.
+
+    This experimental setting only has an effect when CG-Lanczos predictive
+    variances are enabled. By default, CG continues the mean solve after
+    direction storage stops. When this setting is enabled, CG stops as soon as
+    the stored directions can no longer be reorthogonalized.
+
+    (Default: False)
+    """
+
+    _default = False
+
+
 class terminate_cg_by_size(_feature_flag):
     """
     If set to true, cg will terminate after n iterations for an n x n matrix.

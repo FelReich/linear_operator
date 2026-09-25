@@ -215,6 +215,9 @@ def linear_cg(
                 if not could_reorthogonalize:
                     save_directions_cg = False
                     num_stored = k
+                    if settings.cg_lanczos_aggressive_mean_stop.on():
+                        tolerance_reached = True
+                        break
 
             if save_directions_cg:
                 d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
