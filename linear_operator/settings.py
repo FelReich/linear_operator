@@ -531,6 +531,19 @@ class skip_logdet_forward(_feature_flag):
     _default = False
 
 
+class save_directions(_feature_flag):
+    """Use stored CG directions to initialize LOVE predictive variances.
+
+    This experimental setting is off by default. When enabled together with
+    fast predictive variances, GPyTorch reuses CG search directions from the
+    predictive mean solve and extends the resulting basis with Lanczos steps.
+
+    (Default: False)
+    """
+
+    _default = False
+
+
 class terminate_cg_by_size(_feature_flag):
     """
     If set to true, cg will terminate after n iterations for an n x n matrix.
