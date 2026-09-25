@@ -531,7 +531,7 @@ class skip_logdet_forward(_feature_flag):
     _default = False
 
 
-class save_directions(_feature_flag):
+class use_cg_lanczos_variance(_feature_flag):
     """Use stored CG directions to initialize LOVE predictive variances.
 
     This experimental setting is off by default. When enabled together with
