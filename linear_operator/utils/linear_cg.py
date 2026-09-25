@@ -379,37 +379,36 @@ def linear_cg(
                 is_zero,
                 curr_conjugate_vec,
             )
+        elif save_directions_cg:
+            _jit_linear_cg_updates_save_directions(
+                mvms,
+                result,
+                has_converged,
+                alpha,
+                residual_inner_prod,
+                eps,
+                beta,
+                residual,
+                precond_residual,
+                mul_storage,
+                is_zero,
+                curr_conjugate_vec,
+            )
         else:
-            if save_directions_cg:
-                _jit_linear_cg_updates_save_directions(
-                    mvms,
-                    result,
-                    has_converged,
-                    alpha,
-                    residual_inner_prod,
-                    eps,
-                    beta,
-                    residual,
-                    precond_residual,
-                    mul_storage,
-                    is_zero,
-                    curr_conjugate_vec,
-                )
-            else:
-                _jit_linear_cg_updates_no_precond(
-                    mvms,
-                    result,
-                    has_converged,
-                    alpha,
-                    residual_inner_prod,
-                    eps,
-                    beta,
-                    residual,
-                    precond_residual,
-                    mul_storage,
-                    is_zero,
-                    curr_conjugate_vec,
-                )
+            _jit_linear_cg_updates_no_precond(
+                mvms,
+                result,
+                has_converged,
+                alpha,
+                residual_inner_prod,
+                eps,
+                beta,
+                residual,
+                precond_residual,
+                mul_storage,
+                is_zero,
+                curr_conjugate_vec,
+            )
 
         torch.linalg.vector_norm(residual, ord=2, dim=-2, keepdim=True, out=residual_norm)
         residual_norm.masked_fill_(rhs_is_zero, 0)
