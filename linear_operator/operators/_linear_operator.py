@@ -26,7 +26,7 @@ from linear_operator.functions._inv_quad_logdet import InvQuadLogdet
 from linear_operator.functions._matmul import Matmul
 from linear_operator.functions._pivoted_cholesky import PivotedCholesky
 from linear_operator.functions._root_decomposition import RootDecomposition
-from linear_operator.functions._solve import Solve
+from linear_operator.functions._solve import Solve, _solve_with_cg_lanczos_basis
 from linear_operator.functions._sqrt_inv_matmul import SqrtInvMatmul
 from linear_operator.operators.linear_operator_representation_tree import LinearOperatorRepresentationTree
 from linear_operator.utils.broadcasting import _matmul_broadcast_shape
@@ -43,6 +43,7 @@ from linear_operator.utils.getitem import (
     IndexType,
 )
 from linear_operator.utils.lanczos import _postprocess_lanczos_root_inv_decomp
+from linear_operator.utils.cg_lanczos import recover_lanczos_cache_from_cg_directions
 from linear_operator.utils.memoize import (
     _is_in_cache_ignore_all_args,
     _is_in_cache_ignore_args,
@@ -783,6 +784,7 @@ class LinearOperator(object):
         rhs: torch.Tensor,  # shape: (..., N, C)
         preconditioner: Callable[[torch.Tensor], torch.Tensor] | None = None,  # shape: (..., N, C)
         num_tridiag: int | None = 0,
+        save_directions: bool = False,
     ) -> (
         torch.Tensor  # shape: (..., N, C)
         | tuple[
@@ -791,7 +793,15 @@ class LinearOperator(object):
         ]
     ):
         r"""
-        TODO
+        Computes an iterative solve with conjugate gradients.
+
+        If ``save_directions=False`` this returns the usual CG result, or the
+        usual ``(result, tridiags)`` tuple when ``num_tridiag > 0``.
+
+        If ``save_directions=True`` this additionally asks ``linear_cg`` to store
+        the CG search directions and their matrix-vector products. This path is
+        intended for prediction-time CG-Lanczos variance caching and should not be
+        used by the generic public ``solve`` API.
         """
         return utils.linear_cg(
             self._matmul,
@@ -800,6 +810,7 @@ class LinearOperator(object):
             max_iter=settings.max_cg_iterations.value(),
             max_tridiag_iter=settings.max_lanczos_quadrature_iterations.value(),
             preconditioner=preconditioner,
+            save_directions=save_directions
         )
 
     def _solve_preconditioner(self) -> Callable | None:
@@ -2410,6 +2421,36 @@ class LinearOperator(object):
         # This function is only implemented by TriangularLinearOperator subclasses. We define it here so
         # that we can map the torch function torch.linalg.solve_triangular to the LinearOperator method.
         raise NotImplementedError(f"torch.linalg.solve_triangular({self.__class__.__name__}) is not implemented.")
+    
+    def solve_with_cg_lanczos_basis(
+        self: LinearOperator,
+        right_tensor: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        if not self.is_square:
+            raise RuntimeError(
+                "solve_with_cg_lanczos_basis only operates on square LinearOperators."
+            )
+
+        if self.dim() == 2 and right_tensor.dim() == 1:
+            if self.shape[-1] != right_tensor.numel():
+                raise RuntimeError(
+                    "LinearOperator (size={}) cannot be multiplied with right-hand-side Tensor (size={}).".format(
+                        self.shape, right_tensor.shape
+                    )
+                )
+
+        is_vector = False
+        if right_tensor.ndimension() == 1:
+            right_tensor = right_tensor.unsqueeze(-1)
+            is_vector = True
+
+        result, d_mat, kd_mat = _solve_with_cg_lanczos_basis(self, right_tensor)
+        q_mat, kq_mat = recover_lanczos_cache_from_cg_directions(d_mat, kd_mat)
+
+        if is_vector:
+            result = result.squeeze(-1)
+
+        return result, q_mat, kq_mat
 
     @_implements(torch.sqrt)
     def sqrt(

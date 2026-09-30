@@ -541,6 +541,27 @@ class terminate_cg_by_size(_feature_flag):
     _default = False
 
 
+class use_cg_lanczos_variance(_feature_flag):
+    """
+    If set to true, exact GP predictions use CG-derived Lanczos information for fast predictive variances.
+
+    (Default: False)
+    """
+
+    _default = False
+
+
+class cg_lanczos_aggressive_mean_stop(_feature_flag):
+    """
+    If set to true, CG terminates the mean solve when CG-Lanczos direction storage becomes unreliable.
+    If set to false, direction storage stops but CG continues normally for the mean solve.
+
+    (Default: False)
+    """
+
+    _default = False
+
+
 class trace_mode(_feature_flag):
     """
     If set to True, we will generally try to avoid calling our built in PyTorch functions, because these cannot

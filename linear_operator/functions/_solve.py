@@ -21,6 +21,22 @@ def _solve(linear_op, rhs):
             preconditioner = linear_op.detach()._solve_preconditioner()
         return linear_op._solve(rhs, preconditioner)
 
+def _solve_with_cg_lanczos_basis(linear_op, rhs):
+    from linear_operator.operators import CholLinearOperator, TriangularLinearOperator
+
+    if isinstance(linear_op, (CholLinearOperator, TriangularLinearOperator)):
+        raise RuntimeError(
+            "CG-Lanczos basis storage requires an iterative CG solve, "
+            "but this operator uses a direct triangular/Cholesky solve."
+        )
+
+    # The current CG-Lanczos recovery is derived for the unpreconditioned
+    # CG recurrence. Preconditioned CG directions are not supported yet.
+    return linear_op._solve(
+        rhs,
+        preconditioner=None,
+        save_directions=True,
+    )
 
 class Solve(Function):
     @staticmethod
