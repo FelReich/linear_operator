@@ -304,7 +304,6 @@ def linear_cg(
 
     # Un-normalize
     result = result.mul(rhs_norm)
-    print(k, save_directions)
     if not tolerance_reached and n_iter > 0:
         warnings.warn(
             "CG terminated in {} iterations with average residual norm {}"
