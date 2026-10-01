@@ -88,6 +88,39 @@ class TestLinearCG(unittest.TestCase):
         self.assertTrue(torch.allclose(solves, actual, atol=1e-3, rtol=1e-4))
         self.assertGreater(preconditioner.call_count, 1)
 
+    def test_cg_saves_directions_and_products(self):
+        matrix = torch.diag(torch.tensor([1.0, 1.5, 2.0, 3.0, 4.0, 5.0], dtype=torch.float64))
+        rhs = torch.arange(1, 7, dtype=torch.float64).unsqueeze(-1)
+
+        result, directions, products = linear_cg(
+            matrix.matmul,
+            rhs,
+            max_iter=20,
+            tolerance=1e-10,
+            save_directions=True,
+        )
+
+        self.assertEqual(result.shape, rhs.shape)
+        self.assertEqual(directions.shape, products.shape)
+        self.assertEqual(directions.shape[0], matrix.size(0))
+        self.assertGreaterEqual(directions.shape[-1], 2)
+        self.assertTrue(torch.allclose(products, matrix @ directions, atol=1e-10, rtol=1e-10))
+        self.assertTrue(torch.allclose(result, torch.linalg.solve(matrix, rhs), atol=1e-8, rtol=1e-8))
+
+    def test_cg_saves_batched_directions(self):
+        diagonal = torch.tensor([[1.0, 2.0, 3.0, 4.0], [1.5, 2.5, 3.5, 4.5]], dtype=torch.float64)
+        matrix = torch.diag_embed(diagonal)
+        rhs = torch.ones(2, 4, 1, dtype=torch.float64)
+
+        result, directions, products = linear_cg(
+            matrix.matmul, rhs, max_iter=10, max_tridiag_iter=0, tolerance=1e-10, save_directions=True
+        )
+
+        self.assertEqual(directions.shape[:2], (2, 4))
+        self.assertEqual(directions.shape, products.shape)
+        self.assertTrue(torch.allclose(products, matrix @ directions, atol=1e-10, rtol=1e-10))
+        self.assertTrue(torch.allclose(result, torch.linalg.solve(matrix, rhs), atol=1e-7, rtol=1e-7))
+
     def test_cg_with_tridiag(self):
         size = 10
         matrix = torch.randn(size, size, dtype=torch.float64)
