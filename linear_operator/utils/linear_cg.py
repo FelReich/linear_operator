@@ -182,12 +182,10 @@ def linear_cg(
         # alpha_{k} = (residual_{k-1}^T precon_residual{k-1}) / (p_vec_{k-1}^T mat p_vec_{k-1})
         mvms = matmul_closure(curr_conjugate_vec)
 
-        direction_was_reorthogonalized = False
         if save_directions_cg:
             if k > 0:
                 d_prev = d_mat[:k]
                 kd_prev = kd_mat[:k]
-                direction_was_reorthogonalized = True
 
                 could_reorthogonalize = False
                 for _ in range(10):
@@ -217,10 +215,9 @@ def linear_cg(
                         tolerance_reached = True
                         break
 
-            if save_directions_cg:
-                d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
-                kd_mat[k].copy_(mvms.squeeze(-1))
-                num_stored = k + 1
+            d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
+            kd_mat[k].copy_(mvms.squeeze(-1))
+            num_stored = k + 1
 
         torch.mul(curr_conjugate_vec, mvms, out=mul_storage)
         torch.sum(mul_storage, -2, keepdim=True, out=alpha)
@@ -228,7 +225,7 @@ def linear_cg(
         # Do a safe division here
         torch.lt(alpha, eps, out=is_zero)
         alpha.masked_fill_(is_zero, 1)
-        if direction_was_reorthogonalized:
+        if save_directions:
             alpha_numerator = torch.mul(residual, curr_conjugate_vec).sum(dim=-2, keepdim=True)
         else:
             alpha_numerator = residual_inner_prod
