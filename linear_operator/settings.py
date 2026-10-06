@@ -554,7 +554,7 @@ class use_cg_lanczos_variance(_feature_flag):
 class cg_lanczos_aggressive_mean_stop(_feature_flag):
     """
     If set to true, CG terminates the mean solve when CG-Lanczos direction storage becomes unreliable.
-    If set to false, direction storage stops but CG continues normally for the mean solve.
+    If set to false, direction storage stops but the mean solve continues.
 
     (Default: False)
     """

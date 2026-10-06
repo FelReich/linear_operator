@@ -22,6 +22,7 @@ def _solve(linear_op, rhs):
         return linear_op._solve(rhs, preconditioner)
 
 def _solve_with_cg_lanczos_basis(linear_op, rhs):
+    """Run unpreconditioned CG while retaining directions for basis recovery."""
     from linear_operator.operators import CholLinearOperator, TriangularLinearOperator
 
     if isinstance(linear_op, (CholLinearOperator, TriangularLinearOperator)):

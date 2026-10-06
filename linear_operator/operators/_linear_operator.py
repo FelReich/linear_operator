@@ -2426,6 +2426,12 @@ class LinearOperator(object):
         self: LinearOperator,
         right_tensor: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor]:
+        """Solve with CG and recover a basis for Lanczos variance estimates.
+
+        Returns the solution, orthonormal basis, and projected matrix. The last
+        two are ``None`` if fewer than two reliable directions were stored.
+        This path currently supports only an unpreconditioned single RHS.
+        """
         if not self.is_square:
             raise RuntimeError(
                 "solve_with_cg_lanczos_basis only operates on square LinearOperators."

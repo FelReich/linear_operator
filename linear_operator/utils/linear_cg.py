@@ -41,11 +41,13 @@ def linear_cg(
       - tolerance - stop the solve when the (average) norm of the residual(s) is less than this
       - eps - noise to add to prevent division by zero
       - stop_updating_after - will stop updating a vector after this residual norm is reached
+      - reorthogonalization_tol - tolerance for stored-direction conjugacy checks
       - max_iter - the maximum number of CG iterations
       - max_tridiag_iter - the maximum size of the tridiagonalization matrix
       - initial_guess - an initial guess at the solution `result`
       - precondition_closure - a functions which left-preconditions a supplied vector
-      - save_directions - store CG search directions and matrix-vector products for CG-Lanczos variance estimates
+      - save_directions - store CG directions and matrix products for variance estimates;
+        currently requires an unpreconditioned single RHS and n_tridiag=0
 
     Returns:
       result - a solution to the system (if n_tridiag is 0)
@@ -170,6 +172,7 @@ def linear_cg(
 
     num_stored = 0
     if save_directions:
+        # Keep D and KD aligned so the projected matrix can be recovered later.
         d_mat = rhs.new_zeros(n_iter, *batch_shape, num_rows)
         kd_mat = rhs.new_zeros(n_iter, *batch_shape, num_rows)
         save_directions_cg = True
@@ -184,6 +187,7 @@ def linear_cg(
 
         if save_directions_cg:
             if k > 0:
+                # Apply each conjugacy correction to both d and Kd.
                 d_prev = d_mat[:k]
                 kd_prev = kd_mat[:k]
 
@@ -225,6 +229,7 @@ def linear_cg(
         # Do a safe division here
         torch.lt(alpha, eps, out=is_zero)
         alpha.masked_fill_(is_zero, 1)
+        # Reorthogonalization changes d, so the step uses r^T d rather than r^T r.
         if save_directions:
             alpha_numerator = torch.mul(residual, curr_conjugate_vec).sum(dim=-2, keepdim=True)
         else:

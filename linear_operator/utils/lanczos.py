@@ -233,43 +233,21 @@ def extend_lanczos_basis(
     t_mat,
     tol=1e-6,
 ):
-    """Extend an existing Lanczos-type basis.
-
-    This function starts from an already available orthonormal basis ``q_mat``
-    and projected matrix ``t_mat``. In the CG-based experiments, these are
-    obtained from stored CG directions. The routine then continues the Lanczos
-    recurrence until either ``max_iter`` vectors have been reached, numerical
-    breakdown occurs, or the reorthogonalization step fails.
-
-    The input basis is expected in the external convention
-
-        q_mat: [batch, n, J],
-        t_mat: [batch, J, J],
-
-    where ``J`` is the current basis size. Internally, the function uses the
-    same leading-iteration convention as ``linear_operator``'s Lanczos routine,
-
-        q_ext: [J, batch, n],
-        t_ext: [J, J, batch, 1],
-
-    and converts back before returning.
+    """Extend a stored orthonormal basis using the Lanczos recurrence.
 
     Args:
-        matmul_closure: Callable implementing multiplication by the system
-            matrix.
+        matmul_closure: Matrix multiplication callable.
         max_iter: Maximum final basis size.
-        dtype: Floating point dtype used for the basis and projected matrix.
-        device: Device used for the computation.
-        matrix_shape: Shape of the system matrix. Only the final dimension is
-            used to cap the maximum number of iterations.
-        q_mat: Existing orthonormal basis with shape ``[batch, n, J]``.
-        t_mat: Projected matrix for ``q_mat`` with shape ``[batch, J, J]``.
-        tol: Tolerance used for breakdown and reorthogonalization checks.
+        dtype: Dtype of the basis and projected matrix.
+        device: Device for the computation.
+        matrix_shape: Shape of the system matrix.
+        q_mat: Existing basis of shape ``[..., n, J]``.
+        t_mat: Projected matrix of shape ``[..., J, J]``.
+        tol: Breakdown and reorthogonalization tolerance.
 
     Returns:
-        A tuple ``(q_final, t_final)`` where ``q_final`` has shape
-        ``[batch, n, J_final]`` and ``t_final`` has shape
-        ``[batch, J_final, J_final]``.
+        The extended basis and projected matrix. Extension stops on breakdown
+        or failed reorthogonalization.
     """
     if not callable(matmul_closure):
         raise RuntimeError(
@@ -450,6 +428,7 @@ def extend_lanczos_basis_to_root_inv_decomposition(
     t_mat,
     tol=1e-6,
 ):
+    """Extend a stored basis and form its LOVE-style inverse root."""
     from linear_operator.operators import to_linear_operator
     
     q_mat, t_mat = extend_lanczos_basis(
