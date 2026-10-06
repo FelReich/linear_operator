@@ -5,7 +5,7 @@ import torch
 
 
 def recover_lanczos_cache_from_cg_directions(
-        d_mat, 
+        d_mat,
         kd_mat,
         rank_tol=None,
         eps=None,

@@ -430,7 +430,7 @@ def extend_lanczos_basis_to_root_inv_decomposition(
 ):
     """Extend a stored basis and form its LOVE-style inverse root."""
     from linear_operator.operators import to_linear_operator
-    
+
     q_mat, t_mat = extend_lanczos_basis(
         matmul_closure,
         max_iter=max_iter,

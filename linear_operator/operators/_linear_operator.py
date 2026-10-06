@@ -2421,7 +2421,7 @@ class LinearOperator(object):
         # This function is only implemented by TriangularLinearOperator subclasses. We define it here so
         # that we can map the torch function torch.linalg.solve_triangular to the LinearOperator method.
         raise NotImplementedError(f"torch.linalg.solve_triangular({self.__class__.__name__}) is not implemented.")
-    
+
     def solve_with_cg_lanczos_basis(
         self: LinearOperator,
         right_tensor: Tensor,
