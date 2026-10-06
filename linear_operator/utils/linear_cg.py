@@ -217,11 +217,11 @@ def linear_cg(
                     num_stored = k
                     if settings.cg_lanczos_aggressive_mean_stop.on():
                         break
-            
-            if k == 0 or could_reorthogonalize:
-                d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
-                kd_mat[k].copy_(mvms.squeeze(-1))
-                num_stored = k + 1
+
+        if save_directions_cg:
+            d_mat[k].copy_(curr_conjugate_vec.squeeze(-1))
+            kd_mat[k].copy_(mvms.squeeze(-1))
+            num_stored = k + 1
 
         torch.mul(curr_conjugate_vec, mvms, out=mul_storage)
         torch.sum(mul_storage, -2, keepdim=True, out=alpha)
