@@ -20,12 +20,12 @@ def linear_cg(
     tolerance=None,
     eps=1e-10,
     stop_updating_after=1e-10,
-    reorthogonalization_tol=1e-5,
     max_iter=None,
     max_tridiag_iter=None,
     initial_guess=None,
     preconditioner=None,
     save_directions=False,
+    reorthogonalization_tol=1e-5,
 ):
     """
     Implements the linear conjugate gradients method for (approximately) solving systems of the form
@@ -41,13 +41,13 @@ def linear_cg(
       - tolerance - stop the solve when the (average) norm of the residual(s) is less than this
       - eps - noise to add to prevent division by zero
       - stop_updating_after - will stop updating a vector after this residual norm is reached
-      - reorthogonalization_tol - tolerance for stored-direction conjugacy checks
       - max_iter - the maximum number of CG iterations
       - max_tridiag_iter - the maximum size of the tridiagonalization matrix
       - initial_guess - an initial guess at the solution `result`
       - precondition_closure - a functions which left-preconditions a supplied vector
       - save_directions - store CG directions and matrix products for variance estimates;
         currently requires an unpreconditioned single RHS and n_tridiag=0
+      - reorthogonalization_tol - tolerance for stored-direction conjugacy checks
 
     Returns:
       result - a solution to the system (if n_tridiag is 0)
