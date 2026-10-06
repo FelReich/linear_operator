@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import torch
 
+from linear_operator import settings
 from linear_operator.utils.linear_cg import linear_cg
 from linear_operator.utils.warnings import NumericalWarning
 
@@ -120,6 +121,36 @@ class TestLinearCG(unittest.TestCase):
         self.assertEqual(directions.shape, products.shape)
         self.assertTrue(torch.allclose(products, matrix @ directions, atol=1e-10, rtol=1e-10))
         self.assertTrue(torch.allclose(result, torch.linalg.solve(matrix, rhs), atol=1e-7, rtol=1e-7))
+
+    def test_failed_reorthogonalization_stops_storage_and_warns_if_aggressive(self):
+        matrix = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0], dtype=torch.float64))
+        rhs = torch.ones(4, 1, dtype=torch.float64)
+        # A negative threshold forces the failure branch independently of roundoff.
+        kwargs = dict(
+            max_iter=4,
+            max_tridiag_iter=0,
+            tolerance=1e-10,
+            reorthogonalization_tol=-1.0,
+            save_directions=True,
+        )
+
+        with settings.cg_lanczos_aggressive_mean_stop(False):
+            result, directions, products = linear_cg(matrix.matmul, rhs, **kwargs)
+
+        self.assertEqual(directions.shape, (4, 1))
+        self.assertTrue(torch.allclose(products, matrix @ directions))
+        self.assertTrue(torch.allclose(result, torch.linalg.solve(matrix, rhs), atol=1e-10))
+
+        with settings.cg_lanczos_aggressive_mean_stop(True):
+            with self.assertWarns(NumericalWarning) as warning:
+                result, directions, products = linear_cg(matrix.matmul, rhs, **kwargs)
+
+        self.assertEqual(directions.shape, (4, 1))
+        self.assertTrue(torch.allclose(products, matrix @ directions))
+        self.assertIn("after 1 completed iteration", str(warning.warning))
+        self.assertIn("reorthogonalization failed", str(warning.warning))
+        self.assertNotIn("max_cg_iterations", str(warning.warning))
+        self.assertGreater(torch.linalg.vector_norm(matrix @ result - rhs).item(), 1e-2)
 
     def test_cg_with_tridiag(self):
         size = 10

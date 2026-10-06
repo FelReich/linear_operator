@@ -93,6 +93,7 @@ def linear_cg(
         raise NotImplementedError("save_directions currently supports only the unpreconditioned case.")
     if save_directions and rhs.size(-1) != 1:
         raise NotImplementedError("save_directions currently supports only a single right-hand side.")
+    stopped_for_reorthogonalization = False
 
     # Get some constants
     num_rows = rhs.size(-2)
@@ -216,6 +217,7 @@ def linear_cg(
                     save_directions_cg = False
                     num_stored = k
                     if settings.cg_lanczos_aggressive_mean_stop.on():
+                        stopped_for_reorthogonalization = True
                         break
 
         if save_directions_cg:
@@ -306,7 +308,15 @@ def linear_cg(
 
     # Un-normalize
     result = result.mul(rhs_norm)
-    if not tolerance_reached and n_iter > 0:
+
+    if stopped_for_reorthogonalization:
+        warnings.warn(
+            f"CG stopped after {k} completed iterations because direction "
+            f"reorthogonalization failed (average residual norm "
+            f"{residual_norm.mean()}; tolerance {tolerance}).",
+            NumericalWarning,
+        )
+    elif not tolerance_reached and n_iter > 0:
         warnings.warn(
             "CG terminated in {} iterations with average residual norm {}"
             " which is larger than the tolerance of {} specified by"
