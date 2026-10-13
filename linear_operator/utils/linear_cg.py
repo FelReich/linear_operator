@@ -237,7 +237,6 @@ def linear_cg(
         else:
             alpha_numerator = residual_inner_prod
         torch.div(alpha_numerator, alpha, out=alpha)
-        #torch.div(residual_inner_prod, alpha, out=alpha)
         alpha.masked_fill_(is_zero, 0)
 
         # We'll cancel out any updates by setting alpha=0 for any vector that has already converged
@@ -273,7 +272,7 @@ def linear_cg(
         torch.linalg.vector_norm(residual, ord=2, dim=-2, keepdim=True, out=residual_norm)
         residual_norm.masked_fill_(rhs_is_zero, 0)
         torch.lt(residual_norm, stop_updating_after, out=has_converged)
-        #print(residual_norm.mean(), tolerance)
+
         if (
             k >= min(10, max_iter - 1)
             and bool(residual_norm.mean() < tolerance)
